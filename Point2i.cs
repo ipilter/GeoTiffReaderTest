@@ -1,6 +1,8 @@
-﻿namespace GeoTiffReaderTest
+﻿using System;
+
+namespace GeoTiffReaderTest
 {
-  class Point2i
+  public class Point2i
   {
     public static Point2i Create( int x = 0, int y = 0 )
     {
@@ -35,6 +37,31 @@
     public string AsWkt()
     {
       return $"wkt;\npoint({X} {Y})";
+    }
+
+    public static bool operator ==( Point2i a, Point2i b )
+    {
+      return a.X == b.X && a.Y == b.Y;
+    }
+
+    public static bool operator !=( Point2i a, Point2i b )
+    {
+      return !( a == b );
+    }
+
+    public override bool Equals( object o )
+    {
+      if ( o.GetType() != GetType() )
+      {
+        return false;
+      }
+      var other = (Point2i)o;
+      return other == this;
+    }
+
+    public override int GetHashCode()
+    {
+      return Tuple.Create( X, Y ).GetHashCode();
     }
   }
 }

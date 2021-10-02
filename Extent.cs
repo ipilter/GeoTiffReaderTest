@@ -1,23 +1,23 @@
 ﻿namespace GeoTiffReaderTest
 {
-  class Extent : Rectangle
+  public class Extent : Rectangle
   {
-    public Extent( Point2d tl, Point2d br ) // [lat, lon], [lat, lon]
-      : base(tl, br)
+    public Extent( Point2d bl, Point2d tr ) // [lat, lon], [lat, lon]
+      : base(bl, tr)
     { }
 
     public bool Contains( Point2d geo )
     {
-      return geo.X >= TopLeft.X && geo.X <= BottomRight.X &&
-             geo.Y <= TopLeft.Y && geo.Y >= BottomRight.Y;
+      return geo.X >= BottomLeft.X && geo.X < TopRight.X &&
+             geo.Y >= BottomLeft.Y && geo.Y < TopRight.Y;
     }
 
     public Point2d SizeInMeters
-    { 
+    {
       get
       {
-        return Point2d.Create( Utils.Distance(TopLeft, TopRight)
-                               , Utils.Distance(TopLeft, BottomLeft) );
+        return Point2d.Create( Utils.Distance( TopLeft, TopRight )
+                               , Utils.Distance( TopLeft, BottomLeft ) );
       }
       private set { }
     }

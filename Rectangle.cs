@@ -1,34 +1,34 @@
 ﻿namespace GeoTiffReaderTest
 {
-  class Rectangle
+  public class Rectangle
   {
-    public Rectangle( Point2d tl, Point2d br )
+    public Rectangle( Point2d bl, Point2d tr )
     {
-      TopLeft = tl;
-      BottomRight = br;
+      BottomLeft = bl;
+      TopRight = tr;
     }
 
-    public Point2d TopLeft { get; set; }
-    public Point2d BottomRight { get; set; }
-    public Point2d TopRight { get { return Point2d.Create( BottomRight.X, TopLeft.Y ); } private set { } }
-    public Point2d BottomLeft { get { return Point2d.Create( TopLeft.X, BottomRight.Y ); } private set { } }
+    public Point2d BottomLeft { get; set; }
+    public Point2d TopRight { get; set; }
+    public Point2d TopLeft { get { return Point2d.Create( BottomLeft.X, TopRight.Y ); } private set { } }
+    public Point2d BottomRight { get { return Point2d.Create( TopRight.X, BottomLeft.Y ); } private set { } }
 
     public Point2d Size
     {
       get
       {
-        return Point2d.Create( BottomRight.X - TopLeft.X, TopLeft.Y - BottomRight.Y );
+        return Point2d.Create( TopRight.X - BottomLeft.X, TopRight.Y - BottomLeft.Y );
       }
       private set { }
     }
 
     public override string ToString() 
     {
-      return $"[{TopLeft}, {BottomRight}]";
+      return $"[{BottomLeft}, {TopRight}]";
     }
     public string AsWkt()
     {
-      return $"wkt;\nlinestring({TopLeft.X} {TopLeft.Y}, {BottomRight.X} {TopLeft.Y}, {BottomRight.X} {BottomRight.Y}, {TopLeft.X} {BottomRight.Y}, {TopLeft.X} {TopLeft.Y})";
+      return $"wkt;\nlinestring({BottomLeft.X} {BottomLeft.Y}, {TopRight.X} {BottomLeft.Y}, {TopRight.X} {TopRight.Y}, {BottomLeft.X} {TopRight.Y}, {BottomLeft.X} {BottomLeft.Y})";
     }
   }
 }
