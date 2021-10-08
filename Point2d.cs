@@ -4,12 +4,12 @@ namespace GeoTiffReaderTest
 {
   public class Point2d
   {
-    public static Point2d Create(double x = 0.0, double y = 0.0 )
+    public static Point2d Create( double x = 0.0, double y = 0.0 )
     {
       return new Point2d( x, y );
     }
 
-    public Point2d( double x, double y )
+    protected Point2d( double x, double y )
     {
       X = x;
       Y = y;

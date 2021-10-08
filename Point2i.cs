@@ -9,7 +9,7 @@ namespace GeoTiffReaderTest
       return new Point2i( x, y );
     }
 
-    public Point2i( int x, int y )
+    protected Point2i( int x, int y )
     {
       X = x;
       Y = y;

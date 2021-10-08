@@ -39,5 +39,15 @@ namespace GeoTiffReaderTest
         Console.WriteLine( $"Warning: cannot crete {filePath}: {e.Message}" );
       }
     }
+
+    public static double RangeMap( double a0, double a1, double b0, double b1, double value )
+    {
+      double a_norm = a1 - a0;
+      if ( a_norm == 0.0 )
+      {
+        return 0.0;
+      }
+      return ( b0 + ( value - a0 ) * ( b1 - b0 ) ) / a_norm;
+    }
   }
 }

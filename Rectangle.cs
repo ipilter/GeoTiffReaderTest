@@ -2,7 +2,12 @@
 {
   public class Rectangle
   {
-    public Rectangle( Point2d bl, Point2d tr )
+    public static Rectangle Create( Point2d bl, Point2d tr )
+    {
+      return new Rectangle( bl, tr );
+    }
+
+    protected Rectangle( Point2d bl, Point2d tr )
     {
       BottomLeft = bl;
       TopRight = tr;

@@ -2,8 +2,13 @@
 {
   public class Extent : Rectangle
   {
-    public Extent( Point2d bl, Point2d tr ) // [lat, lon], [lat, lon]
-      : base(bl, tr)
+    public static new Extent Create( Point2d bl, Point2d tr ) // [lat, lon], [lat, lon]
+    {
+      return new Extent( bl, tr );
+    }
+
+    protected Extent( Point2d bl, Point2d tr )
+      : base( bl, tr )
     { }
 
     public bool Contains( Point2d geo )

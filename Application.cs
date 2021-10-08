@@ -6,9 +6,10 @@ namespace GeoTiffReaderTest
 {
   public class Application
   {
-    string mGeoTiffPath;
-    Point2d samplePosition;
-    string mWktPath;
+    string mInputDataFilePath;
+    Extent mRegion;
+    string mOutputPath;
+    int mMeshSubdivision;
 
     public Application( string[] args )
     {
@@ -17,7 +18,7 @@ namespace GeoTiffReaderTest
         GdalConfiguration.ConfigureGdal();
         ParseArgs( args );
       }
-      catch (Exception e)
+      catch ( Exception e )
       {
         throw new Exception( "Application failed: ", e );
       }
@@ -25,68 +26,210 @@ namespace GeoTiffReaderTest
 
     public void run()
     {
-      var geoTiff = new GeoTiff( mGeoTiffPath );
+      GetTileImages( out List<string> tileImagePaths );
 
-      Utils.CreateWkt( mWktPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
+      var geoTiff = GeoTiffFactory.CreateFromTiles( tileImagePaths );
+      CreateMesh( geoTiff );
+    }
 
-      var min = double.MaxValue;
-      var max = double.MinValue;
-      Point2i minPixel = Point2i.Create();
-      Point2i maxPixel = Point2i.Create();
+    void GetTileImages( out List<string> tileImagePaths )
+    {
+      tileImagePaths = new List<string>();
+      using ( var e = new StreamReader( mInputDataFilePath )  )
       {
-        var pixel = Point2i.Create();
-        for ( pixel.Y = 0; pixel.Y < geoTiff.Size.Y; ++pixel.Y )
+        string line;
+        while ( (line = e.ReadLine() ) != null )
         {
-          for ( pixel.X = 0; pixel.X < geoTiff.Size.X; ++pixel.X )
+          line = line.Trim();
+          if ( line.Length == 0 || line[0] == '#' )
+            continue;
+          if ( line[0] == '"' )
+            line = line.Remove( 0, 1 );
+          if ( line[line.Length - 1] == '"' )
+            line = line.Remove( line.Length - 1, 1 );
+
+          tileImagePaths.Add( line );
+        }
+      }
+    }
+
+    void CreateMesh( GeoTiff geoTiff )
+    {
+      Utils.CreateWkt( mOutputPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
+
+      SearchMinMax( geoTiff, out double min, out Point2d minGeo, out double max, out Point2d maxGeo );
+      Console.WriteLine( $"Minimum height is {min}m, maximum is {max}m" );
+      Utils.CreateWkt( mOutputPath + @"\minGeo.csv", minGeo.AsWkt() );
+      Utils.CreateWkt( mOutputPath + @"\maxGeo.csv", maxGeo.AsWkt() );
+
+      // Create mesh from the region
+      {
+        Utils.CreateWkt( mOutputPath + @"\region.csv", mRegion.AsWkt() );
+        Utils.CreateWkt( mOutputPath + @"\regionbl.csv", mRegion.BottomLeft.AsWkt() );
+        Utils.CreateWkt( mOutputPath + @"\regiontr.csv", mRegion.TopRight.AsWkt() );
+
+        // get region in pixel space
+        geoTiff.GeoToPixel( mRegion.BottomLeft, out Point2i pixelBottomLeft );
+        geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
+        geoTiff.GeoToPixel( mRegion.TopRight, out Point2i pixelTopRight );
+        
+        // expand to pixel's outter side
+        geoTiff.PixelToGeo( pixelBottomLeft, out Point2d geoBottomLeft, GeoTiff.PixelPosition.BottomLeft );
+        geoTiff.PixelToGeo( pixelTopLeft, out Point2d geoTopLeft, GeoTiff.PixelPosition.TopLeft );
+        geoTiff.PixelToGeo( pixelTopRight, out Point2d geoTopRight, GeoTiff.PixelPosition.TopRight );
+
+        Utils.CreateWkt( mOutputPath + @"\regionBottomLeft.csv", geoBottomLeft.AsWkt() );
+        Utils.CreateWkt( mOutputPath + @"\regionTopLeft.csv", geoTopLeft.AsWkt() );
+        Utils.CreateWkt( mOutputPath + @"\regionTopRight.csv", geoTopRight.AsWkt() );
+
+        var dh = max - min;
+        var meterScaled = 1.0 / dh;
+        var dLefTopRight = Utils.Distance( geoTopLeft, geoTopRight );
+        var dTopBottom = Utils.Distance( geoTopLeft, geoBottomLeft );
+        Console.WriteLine( $"dLefTopRight is {dLefTopRight}m, dTopBottom is {dTopBottom}m" );
+
+        var dLefTopRightScaled = dLefTopRight * meterScaled;
+        var dTopBottomScaled = dTopBottom * meterScaled;
+
+        var vertices = new List<double>();
+        var uvs = new List<double>();
+        var faces = new List<int>();
+        var vertexIndexTable = new Dictionary<Point2d, int>();
+
+        var meshOrigin = Point2d.Create();
+        var uvOrigin = Point2d.Create();
+
+        var dX = dLefTopRightScaled / mMeshSubdivision;
+        var dY = dTopBottomScaled / mMeshSubdivision;
+        var du = 1.0 / mMeshSubdivision;
+        var dv = 1.0 / mMeshSubdivision;
+        for ( int y = 0; y < mMeshSubdivision; ++y )
+        {
+          for ( int x = 0; x < mMeshSubdivision; ++x )
           {
-            var height = geoTiff.Pixel( pixel );
-            if ( height > max )
-            {
-              max = height;
-              maxPixel.Clone( pixel );
-            }
-            if ( height < min )
-            {
-              min = height;
-              minPixel.Clone( pixel );
-            }
+            AddFace( vertices, uvs, faces, vertexIndexTable
+                     , meshOrigin.X + x * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + y * dv
+                     , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + y * dv
+                     , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + ( y + 1 ) * dv
+                     , meshOrigin.X + x * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + ( y + 1 ) * dv );
+          }
+        }
+
+        // Wrtie out mesh obj
+        double scale = 1.0;
+        using ( StreamWriter wktStream = new StreamWriter( $"{mOutputPath}\\mesh.obj" ) )
+        {
+          for ( int i = 0; i < vertices.Count; i += 3 )
+          {
+            wktStream.WriteLine( $"v {vertices[i] * scale} {vertices[i + 1] * scale} {vertices[i + 2] * scale}" );
+          }
+
+          for ( int i = 0; i < uvs.Count; i += 2 )
+          {
+            wktStream.WriteLine( $"vt {uvs[i]} {uvs[i + 1]}" );
+          }
+
+          wktStream.WriteLine( $"vn 0.0 0.0 1.0" );
+
+          for ( int i = 0; i < faces.Count; i += 8 ) // 4 * 2: 4 vertex 2 ints per vertex
+          {
+            wktStream.WriteLine( $"f {faces[i]}/{faces[i + 1]}/1 {faces[i + 2]}/{faces[i + 3]}/1 {faces[i + 4]}/{faces[i + 5]}/1 {faces[i + 6]}/{faces[i + 7]}/1" );
           }
         }
       }
-      Console.WriteLine($"Minimum height is {min}m, maximum is {max}m");
-      geoTiff.PixelToGeo( minPixel, out Point2d minGeo, GeoTiff.PixelPosition.Center );
-      geoTiff.PixelToGeo( maxPixel, out Point2d maxGeo, GeoTiff.PixelPosition.Center );
-      Utils.CreateWkt( mWktPath + @"\minGeo.csv", minGeo.AsWkt() );
-      Utils.CreateWkt( mWktPath + @"\maxGeo.csv", maxGeo.AsWkt() );
 
-      // max -> 1.0
-      // min -> 0.0
-      var dh = max - min;
-      var oneMeter = 1.0 / dh;
-      var sizeInMeters = geoTiff.Extent.SizeInMeters;
-      var gridWidth = sizeInMeters.X *= oneMeter;
-      var gridLength = sizeInMeters.Y *= oneMeter;
-      Console.WriteLine( $"Grid size with height between 0.0 and 1.0 is [{gridWidth}, {gridLength}]" );
-
-      // Create a grid with the dims above (flat, displacement will be applied runtime) : 0,0 -> [gridWidth, gridLength]
-      var gridBottomLeft = geoTiff.Extent.BottomLeft;
-      var gridTopRight = geoTiff.Extent.BottomLeft + Point2d.Create( 0.2, 0.2 );
+      // create normalized height data from the input image (height between 0.0m and 1.0m)
       {
-        geoTiff.GeoToPixel( gridTopRight, out Point2i pixelTopRight );
-        geoTiff.GeoToPixel( gridBottomLeft, out Point2i pixelgridBottomLeft );
+        var pixels = new List<float>();
+        geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
+        geoTiff.GeoToPixel( mRegion.BottomRight, out Point2i pixelBottomRight );
+        var psx = pixelBottomRight.X - pixelTopLeft.X + 1;
+        var psy = pixelBottomRight.Y - pixelTopLeft.Y + 1;
+        for ( int y = 0; y < psy; ++y )
+        {
+          for ( int x = 0; x < psx; ++x )
+          {
+            var height = geoTiff.Pixel( Point2i.Create( pixelTopLeft.X + x, pixelTopLeft.Y + y ) );
+            var heightNorm = (float)Utils.RangeMap( min, max, 0.0, 1.0, height );
+            pixels.Add( heightNorm );
+          }
+        }
 
-        // create geometry
-        var vertices = new List<double>();
-        var normals = new List<double>();
-        var faces = new List<uint>();
-
-        //var originX = 0.0;
-        //var originY = 0.0;
-
-        // 
-
-        // write geometry as Obj file to disk
+        // Write out sub image
+        GeoTiff.Write( pixels, psx, psy, $"{mOutputPath}heightfield.tif" );
       }
+    }
+
+    void AddVertex( List<double> vertices, List<double> uvs, Dictionary<Point2d, int> vertexIndexTable
+                    , double x, double y, double z, double u, double v, out int vertexIdx, out int uvIdx )
+    {
+      var p = Point2d.Create( x, y );
+      if ( !vertexIndexTable.ContainsKey( p ) )
+      {
+        vertices.Add( x );
+        vertices.Add( y );
+        vertices.Add( z );
+        uvs.Add( u );
+        uvs.Add( v );
+        vertexIdx = vertices.Count / 3;
+        uvIdx = uvs.Count / 2;
+        vertexIndexTable.Add( p, vertexIdx );
+      }
+      else
+      {
+        vertexIdx = uvIdx = vertexIndexTable[p];
+      }
+    }
+
+    void AddFace( List<double> vertices, List<double> uvs, List<int> faces, Dictionary<Point2d, int> vertexIndexTable
+                  , double x0, double y0, double z0, double u0, double v0
+                  , double x1, double y1, double z1, double u1, double v1
+                  , double x2, double y2, double z2, double u2, double v2
+                  , double x3, double y3, double z3, double u3, double v3 )
+    {
+      AddVertex( vertices, uvs, vertexIndexTable, x0, y0, z0, u0, v0, out int f0, out int uv0 );
+      faces.Add( f0 );
+      faces.Add( uv0 );
+
+      AddVertex( vertices, uvs, vertexIndexTable, x1, y1, z1, u1, v1, out int f1, out int uv1 );
+      faces.Add( f1 );
+      faces.Add( uv1 );
+
+      AddVertex( vertices, uvs, vertexIndexTable, x2, y2, z2, u2, v2, out int f2, out int uv2 );
+      faces.Add( f2 );
+      faces.Add( uv2 );
+
+      AddVertex( vertices, uvs, vertexIndexTable, x3, y3, z3, u3, v3, out int f3, out int uv3 );
+      faces.Add( f3 );
+      faces.Add( uv3 );
+    }
+
+    void SearchMinMax( GeoTiff geoTiff, out double min, out Point2d minGeo, out double max, out Point2d maxGeo )
+    {
+      min = double.MaxValue;
+      max = double.MinValue;
+      Point2i minPixel = Point2i.Create();
+      Point2i maxPixel = Point2i.Create();
+      var pixel = Point2i.Create();
+      for ( pixel.Y = 0; pixel.Y < geoTiff.Size.Y; ++pixel.Y )
+      {
+        for ( pixel.X = 0; pixel.X < geoTiff.Size.X; ++pixel.X )
+        {
+          var height = geoTiff.Pixel( pixel );
+          if ( height > max )
+          {
+            max = height;
+            maxPixel.Clone( pixel );
+          }
+          if ( height < min )
+          {
+            min = height;
+            minPixel.Clone( pixel );
+          }
+        }
+      }
+      geoTiff.PixelToGeo( minPixel, out minGeo, GeoTiff.PixelPosition.Center );
+      geoTiff.PixelToGeo( maxPixel, out maxGeo, GeoTiff.PixelPosition.Center );
     }
 
     void Sample( GeoTiff geoTiff, Point2d samplePosition, string msg )
@@ -103,23 +246,46 @@ namespace GeoTiffReaderTest
 
     void ParseArgs( string[] args )
     {
-      if ( args.Length < 3 )
+      if ( args.Length < 5 )
       {
-        throw new Exception( @"Invalid arguments. Usage: tiffPath geoX geoY [wktPath=""d:\""]" );
+        throw new ArgumentException( @"Invalid arguments. Usage: datFilePath right bottom left top [outputPath=""Desktop"" meshSubdivision=16]" );
       }
 
       // mandatories
-      mGeoTiffPath = args[0];
-      samplePosition = Point2d.Create( double.Parse( args[1] ), double.Parse( args[2] ) );
+      mInputDataFilePath = args[0];
+      if ( !File.Exists( mInputDataFilePath ) )
+      {
+        throw new ArgumentException( @"cannot find input data file" );
+      }
+
+      mRegion = Extent.Create( Point2d.Create( double.Parse( args[1] ), double.Parse( args[2] ) )
+                               , Point2d.Create( double.Parse( args[3] ), double.Parse( args[4] ) ) );
 
       // optionals
-      if ( args.Length > 3 )
+      ParseOptional( args, 5, ref mOutputPath, Environment.GetFolderPath( Environment.SpecialFolder.DesktopDirectory ) );
+      ParseOptional( args, 6, ref mMeshSubdivision, 32 );
+    }
+
+    void ParseOptional( string[] args, int idx, ref string value, string defaultValue )
+    {
+      if ( args.Length > idx )
       {
-        mWktPath = $"{args[3]}";
+        value = args[idx];
       }
       else
       {
-        mWktPath = Environment.GetFolderPath( Environment.SpecialFolder.DesktopDirectory );
+        value = defaultValue;
+      }
+    }
+    void ParseOptional( string[] args, int idx, ref int value, int defaultValue )
+    {
+      if ( args.Length > idx )
+      {
+        value = int.Parse( args[idx] );
+      }
+      else
+      {
+        value = defaultValue;
       }
     }
   }

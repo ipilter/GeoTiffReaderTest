@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using OSGeo.GDAL;
 
 namespace GeoTiffReaderTest
@@ -23,28 +24,97 @@ namespace GeoTiffReaderTest
       , TopRight = 4
     }
 
+
+
     public GeoTiff( string path )
     {
       var dataset = Gdal.Open( path, Access.GA_ReadOnly );
       Size = Point2i.Create( dataset.RasterXSize, dataset.RasterYSize );
 
       dataset.GetGeoTransform( mGeoTransform );
-      NorthUp = mGeoTransform[5] < 0;  // TODO follow this rabbit
+      NorthUp = mGeoTransform[5] < 0;
 
-      // change origin
+      // change origin from TopLeft to BottomLeft
       {
         mGeoTransform[3] = mGeoTransform[3] + mGeoTransform[5] * Size.Y;
-        mGeoTransform[5] = -mGeoTransform[5];
+        mGeoTransform[5] = Math.Abs( mGeoTransform[5] );
       }
       Gdal.InvGeoTransform( mGeoTransform, mInvGeoTransform );
 
       Resolution = Point2d.Create( mGeoTransform[1], mGeoTransform[5] );
-      Extent = new Extent( Point2d.Create( mGeoTransform[0], mGeoTransform[3] )
-                           , Point2d.Create( mGeoTransform[0] + ( dataset.RasterXSize * Resolution.X )
-                                             , mGeoTransform[3] + ( dataset.RasterYSize * Resolution.Y ) ) );
+      Extent = Extent.Create( Point2d.Create( mGeoTransform[0], mGeoTransform[3] )
+                              , Point2d.Create( mGeoTransform[0] + ( mSize.X * Resolution.X )
+                                             , mGeoTransform[3] + ( mSize.Y * Resolution.Y ) ) );
 
       mPixels = new double[mSize.X * mSize.Y];
       dataset.GetRasterBand( 1 ).ReadRaster( 0, 0, mSize.X, mSize.Y, mPixels, mSize.X, mSize.Y, 0, 0 );
+    }
+
+    public GeoTiff( List<string> tileImagePaths, Point2i tileCount )
+    {
+      if ( tileImagePaths.Count != tileCount.X * tileCount.Y )
+      {
+        throw new ArgumentException( "invalid tile count, cannot create GeoTiff" );
+      }
+
+      var tileDatasets = new List<Dataset>();
+
+      Size = Point2i.Create();
+      var tileIdx = Point2i.Create();
+      double[] tileGeoTransform = new double[6];
+      for ( ; tileIdx.Y < tileCount.Y; ++tileIdx.Y )
+      {
+        for ( ; tileIdx.X < tileCount.X; ++tileIdx.X )
+        {
+          var tileFilePath = tileImagePaths[tileIdx.X + tileIdx.Y * tileCount.Y];
+          var tileDataset = Gdal.Open( tileFilePath, Access.GA_ReadOnly );
+          tileDatasets.Add( tileDataset );
+          Size.X += tileDatasets[tileIdx.X].RasterXSize;
+
+          tileDataset.GetGeoTransform( tileGeoTransform );
+        }
+        Size.Y += tileDatasets[0 + tileIdx.Y * tileCount.Y].RasterYSize;
+        tileDatasets[0 + tileIdx.Y * tileCount.Y].GetGeoTransform( tileGeoTransform );
+      }
+
+      // first image is bottom left corner resolution is for all tiles
+      tileDatasets[0].GetGeoTransform( tileGeoTransform );
+      mGeoTransform[0] = tileGeoTransform[0];
+      mGeoTransform[1] = tileGeoTransform[1];
+      mGeoTransform[3] = tileGeoTransform[3];
+      mGeoTransform[5] = tileGeoTransform[5];
+      NorthUp = mGeoTransform[5] < 0;
+
+      // change origin from TopLeft to BottomLeft
+      {
+        mGeoTransform[3] = mGeoTransform[3] + mGeoTransform[5] * Size.Y;
+        mGeoTransform[5] = Math.Abs( mGeoTransform[5] );
+      }
+      Gdal.InvGeoTransform( mGeoTransform, mInvGeoTransform );
+
+      Resolution = Point2d.Create( mGeoTransform[1], mGeoTransform[5] );
+      Extent = Extent.Create( Point2d.Create( mGeoTransform[0], mGeoTransform[3] )
+                              , Point2d.Create( mGeoTransform[0] + ( Size.X * Resolution.X )
+                                                , mGeoTransform[3] + ( Size.Y * Resolution.Y ) ) );
+
+      mPixels = new double[mSize.X * mSize.Y];
+
+      // TODO: read the tiles into thje mPixels array
+      //{
+      //  var tileDataset = tileDatasets[0];
+      //  tileDataset.GetRasterBand( 1 ).ReadRaster( 0, 0, tileDataset.RasterXSize, tileDataset.RasterYSize
+      //                                             , mPixels[0]
+      //                                             , mSize.X, mSize.Y
+      //                                             , 0, 0 );
+      //}
+    }
+
+    public static void Write( List<float> pixels, int w, int h, string path )
+    {
+      var driver = Gdal.GetDriverByName( "GTiff" );
+      var dataset = driver.Create( path, w, h, 1, DataType.GDT_Float32, null );
+      dataset.WriteRaster( 0, 0, w, h, pixels.ToArray(), w, h, 1, null, 0, 0, 0 );
+      dataset.FlushCache();
     }
 
     public double Sample( Point2d geo )
@@ -97,8 +167,10 @@ namespace GeoTiffReaderTest
 
     public void GeoToPixel( Point2d geo, out Point2i pixel )
     {
-      var x = (int)Math.Floor( mInvGeoTransform[0] + geo.X * mInvGeoTransform[1] + geo.Y * mInvGeoTransform[2] );
-      var y = (int)Math.Floor( mInvGeoTransform[3] + geo.X * mInvGeoTransform[4] + geo.Y * mInvGeoTransform[5] );
+      var fx = Math.Floor( mInvGeoTransform[0] + geo.X * mInvGeoTransform[1] + geo.Y * mInvGeoTransform[2] );
+      var fy = Math.Floor( mInvGeoTransform[3] + geo.X * mInvGeoTransform[4] + geo.Y * mInvGeoTransform[5] );
+      var x = (int)fx;
+      var y = (int)fy;
       pixel = Point2i.Create( x, ( Size.Y - 1 ) - y ); // invert y
     }
 
