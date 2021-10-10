@@ -55,18 +55,18 @@ namespace GeoTiffReaderTest
 
     void CreateMesh( GeoTiff geoTiff )
     {
-      Utils.CreateWkt( mOutputPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
+      Utils.CreateFile( mOutputPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
 
       SearchMinMax( geoTiff, out double min, out Point2d minGeo, out double max, out Point2d maxGeo );
       Console.WriteLine( $"Minimum height is {min}m, maximum is {max}m" );
-      Utils.CreateWkt( mOutputPath + @"\minGeo.csv", minGeo.AsWkt() );
-      Utils.CreateWkt( mOutputPath + @"\maxGeo.csv", maxGeo.AsWkt() );
+      Utils.CreateFile( mOutputPath + @"\minGeo.csv", minGeo.AsWkt() );
+      Utils.CreateFile( mOutputPath + @"\maxGeo.csv", maxGeo.AsWkt() );
 
       // Create mesh from the region
       {
-        Utils.CreateWkt( mOutputPath + @"\region.csv", mRegion.AsWkt() );
-        Utils.CreateWkt( mOutputPath + @"\regionbl.csv", mRegion.BottomLeft.AsWkt() );
-        Utils.CreateWkt( mOutputPath + @"\regiontr.csv", mRegion.TopRight.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\region.csv", mRegion.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\regionbl.csv", mRegion.BottomLeft.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\regiontr.csv", mRegion.TopRight.AsWkt() );
 
         // get region in pixel space
         geoTiff.GeoToPixel( mRegion.BottomLeft, out Point2i pixelBottomLeft );
@@ -78,9 +78,9 @@ namespace GeoTiffReaderTest
         geoTiff.PixelToGeo( pixelTopLeft, out Point2d geoTopLeft, GeoTiff.PixelPosition.TopLeft );
         geoTiff.PixelToGeo( pixelTopRight, out Point2d geoTopRight, GeoTiff.PixelPosition.TopRight );
 
-        Utils.CreateWkt( mOutputPath + @"\regionBottomLeft.csv", geoBottomLeft.AsWkt() );
-        Utils.CreateWkt( mOutputPath + @"\regionTopLeft.csv", geoTopLeft.AsWkt() );
-        Utils.CreateWkt( mOutputPath + @"\regionTopRight.csv", geoTopRight.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\regionBottomLeft.csv", geoBottomLeft.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\regionTopLeft.csv", geoTopLeft.AsWkt() );
+        Utils.CreateFile( mOutputPath + @"\regionTopRight.csv", geoTopRight.AsWkt() );
 
         var dh = max - min;
         var meterScaled = 1.0 / dh;
@@ -156,7 +156,9 @@ namespace GeoTiffReaderTest
         }
 
         // Write out sub image
-        GeoTiff.Write( pixels, psx, psy, $"{mOutputPath}heightfield.tif" );
+        var m = new double[6];
+        m[1] = m[5] = 1.0;
+        GeoTiff.Write( $"{mOutputPath}heightfield.tif", pixels.ToArray(), psx, psy, m );
       }
     }
 

@@ -21,59 +21,95 @@ namespace UnitTests
       var testImage = @"..\..\testData\ALPSMLC30_N036W115_DSM.tif";
 
       GeoTiff geoTiff = new GeoTiff( testImage  );
+      
+      geoTiff.Write( "e:\\testiViaSingleFile.tif" );
+      Assert.IsTrue( File.Exists( "e:\\testiViaSingleFile.tif" ) );
 
-      Assert.AreEqual( geoTiff.Extent.TopRight, Point2d.Create( -114, 37 ) );
-      Assert.AreEqual( geoTiff.Extent.TopLeft, Point2d.Create( -115, 37 ) );
-      Assert.AreEqual( geoTiff.Extent.BottomLeft, Point2d.Create( -115, 36 ) );
-      Assert.AreEqual( geoTiff.Extent.BottomRight, Point2d.Create( -114, 36 ) );
+      Assert.AreEqual( Point2d.Create( -114, 37 ), geoTiff.Extent.TopRight );
+      Assert.AreEqual( Point2d.Create( -115, 37 ), geoTiff.Extent.TopLeft  );
+      Assert.AreEqual( Point2d.Create( -115, 36 ), geoTiff.Extent.BottomLeft );
+      Assert.AreEqual( Point2d.Create( -114, 36 ), geoTiff.Extent.BottomRight );
 
-      Assert.AreEqual( geoTiff.Size, Point2i.Create( 3600, 3600 ) );
+      Assert.AreEqual( Point2i.Create( 3600, 3600 ), geoTiff.Size );
       Assert.IsTrue( geoTiff.NorthUp );
-      Assert.AreEqual( geoTiff.Resolution, Point2d.Create( 1.0 / 3600, 1.0 / 3600 ) );
+      Assert.AreEqual( Point2d.Create( 1.0 / 3600, 1.0 / 3600 ), geoTiff.Resolution );
 
-      Assert.AreEqual( geoTiff.Pixel( Point2i.Create( 0, 0 ) ), 804 );
-      Assert.AreEqual( geoTiff.Pixel( Point2i.Create( 3599, 0 ) ), 665 );
-      Assert.AreEqual( geoTiff.Pixel( Point2i.Create( 0, 3599 ) ), 795 );
-      Assert.AreEqual( geoTiff.Pixel( Point2i.Create( 3599, 3599 ) ), 915 );
+      Assert.AreEqual( 804.0f, geoTiff.Pixel( Point2i.Create( 0, 0 ) ) );
+      Assert.AreEqual( 665.0f, geoTiff.Pixel( Point2i.Create( 3599, 0 ) ) );
+      Assert.AreEqual( 795.0f, geoTiff.Pixel( Point2i.Create( 0, 3599 ) ) );
+      Assert.AreEqual( 915.0f, geoTiff.Pixel( Point2i.Create( 3599, 3599 ) ) );
 
-      Assert.AreEqual( geoTiff.Extent.Size, Point2d.Create( 1.0, 1.0 ) );
-      Assert.AreEqual( geoTiff.Extent.SizeInMeters, Point2d.Create( 88903.2896148812, 111319.490793274 ) );
+      Assert.AreEqual( Point2d.Create( 1.0, 1.0 ), geoTiff.Extent.Size );
+      Assert.AreEqual( Point2d.Create( 88903.2896148812, 111319.490793274 ), geoTiff.Extent.SizeInMeters );
     }
 
     [TestMethod]
-    public void TestCreationViaTileFileList()
+    public void TestCreationViaTileFileList_tiles2x1()
     {
       var tileCount = Point2i.Create( 2, 1 );
       List<string> tileFileList = new List<string>();
       tileFileList.Add( @"..\..\testData\ALPSMLC30_N036W115_DSM.tif" );
       tileFileList.Add( @"..\..\testData\ALPSMLC30_N036W114_DSM.tif" );
 
-      foreach(var tile in tileFileList )
+      foreach ( var tile in tileFileList )
       {
         Assert.IsTrue( File.Exists( tile ) );
       }
 
       GeoTiff geoTiff = new GeoTiff( tileFileList, tileCount );
+      geoTiff.Write( "e:\\testiViaTileFileList.tif" );
 
-      Assert.AreEqual( geoTiff.Extent.BottomLeft, Point2d.Create( -115, 36 ) );
-      Assert.AreEqual( geoTiff.Extent.TopRight, Point2d.Create( -113, 37 ) );
+      Assert.IsTrue( File.Exists( "e:\\testiViaTileFileList.tif" ) );
 
-      Assert.AreEqual( geoTiff.Extent.TopLeft, Point2d.Create( -115, 37 ) );
-      Assert.AreEqual( geoTiff.Extent.BottomRight, Point2d.Create( -113, 36 ) );
-      
+      Assert.AreEqual( Point2d.Create( -115, 36 ), geoTiff.Extent.BottomLeft );
+      Assert.AreEqual( Point2d.Create( -113, 37 ), geoTiff.Extent.TopRight );
+
+      Assert.AreEqual( Point2d.Create( -115, 37 ), geoTiff.Extent.TopLeft );
+      Assert.AreEqual( Point2d.Create( -113, 36 ), geoTiff.Extent.BottomRight );
+
       var width = 3600 * 2;
       var height = 3600;
-      Assert.AreEqual( geoTiff.Size, Point2i.Create( width, height ) );
+      Assert.AreEqual( Point2i.Create( width, height ), geoTiff.Size );
       Assert.IsTrue( geoTiff.NorthUp );
-      Assert.AreEqual( geoTiff.Resolution, Point2d.Create( 2.0 / width, 1.0 / height ) );
+      Assert.AreEqual( Point2d.Create( 2.0 / width, 1.0 / height ), geoTiff.Resolution );
 
-      Assert.AreEqual( 804, geoTiff.Pixel( Point2i.Create( 0, 0 ) ) );
-      Assert.AreEqual( 665, geoTiff.Pixel( Point2i.Create( 3599, 0 ) ) );
-      Assert.AreEqual( 795, geoTiff.Pixel( Point2i.Create( 0, 3599 ) ) );
-      Assert.AreEqual( 915, geoTiff.Pixel( Point2i.Create( 3599, 3599 ) ) );
+      Assert.AreEqual( 804.0f, geoTiff.Pixel( Point2i.Create( 0, 0 ) ) );
+      Assert.AreEqual( 665.0f, geoTiff.Pixel( Point2i.Create( 3599, 0 ) ) );
+      Assert.AreEqual( 915.0f, geoTiff.Pixel( Point2i.Create( 3599, 3599 ) ) );
 
-      Assert.AreEqual( geoTiff.Extent.Size, Point2d.Create( 2.0, 1.0 ) );
-      //Assert.AreEqual( geoTiff.Extent.SizeInMeters, Point2d.Create( 88903.2896148812 * 2.0, 111319.490793274 ) );
+      Assert.AreEqual( 669.0f, geoTiff.Pixel( Point2i.Create( 3600 + 1, 0 ) ) );
+      Assert.AreEqual( 668.0f, geoTiff.Pixel( Point2i.Create( 3600 + 2, 0 ) ) );
+      Assert.AreEqual( 670.0f, geoTiff.Pixel( Point2i.Create( 3600 + 3, 0 ) ) );
+      Assert.AreEqual( 669.0f, geoTiff.Pixel( Point2i.Create( 3600 + 4, 0 ) ) );
+
+      Assert.AreEqual( 670.0f, geoTiff.Pixel( Point2i.Create( 3600 + 0, 3 ) ) );
+      Assert.AreEqual( 667.0f, geoTiff.Pixel( Point2i.Create( 3600 + 1, 3 ) ) );
+      Assert.AreEqual( 670.0f, geoTiff.Pixel( Point2i.Create( 3600 + 6, 3 ) ) );
+      Assert.AreEqual( 670.0f, geoTiff.Pixel( Point2i.Create( 3600 + 7, 3 ) ) );
+      Assert.AreEqual( 668.0f, geoTiff.Pixel( Point2i.Create( 3600 + 8, 3 ) ) );
+      Assert.AreEqual( 670.0f, geoTiff.Pixel( Point2i.Create( 3600 + 6, 4 ) ) );
+      Assert.AreEqual( 668.0f, geoTiff.Pixel( Point2i.Create( 3600 + 6, 5 ) ) );
+
+      var samplePositions = new List<Tuple<Point2d, float>>() 
+      {
+        Tuple.Create( Point2d.Create( -113.2257057, 36.3609809 ), 2008.0f ) 
+        , Tuple.Create( Point2d.Create( -113.343170, 36.051512 ), 788.0f )
+        , Tuple.Create( Point2d.Create( -114.114267, 36.605136 ), 2207.0f )
+        , Tuple.Create( Point2d.Create( -114.7056917, 36.2298569 ), 1023.0f )
+        , Tuple.Create( Point2d.Create( -114.9999999788, 36.0000000077 ), 795.0f )
+        , Tuple.Create( Point2d.Create( -114.9999788, 36.9999806 ), 804.0f )
+        , Tuple.Create( Point2d.Create( -113.00001929, 36.99998337 ), 1539.0f )
+        , Tuple.Create( Point2d.Create( -113.0000295, 36.0000292 ), 1949.0f )
+      };
+
+      foreach ( var samplePos in samplePositions )
+      {
+        geoTiff.GeoToPixel( samplePos.Item1, out Point2i samplePixel );
+        Assert.AreEqual( samplePos.Item2, geoTiff.Pixel( samplePixel ) );
+      }
+
+      Assert.AreEqual( Point2d.Create( 2.0, 1.0 ), geoTiff.Extent.Size );
+      //Assert.AreEqual( Point2d.Create( 88903.2896148812 * 2.0, 111319.490793274 ), geoTiff.Extent.SizeInMeters );
     }
 
     [TestMethod]
@@ -85,19 +121,19 @@ namespace UnitTests
 
       {
         geoTiff.GeoToPixel( geoTiff.Extent.TopLeft + Point2d.Create( geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( pixel, Point2i.Create( 0, 0 ) );
+        Assert.AreEqual( Point2i.Create( 0, 0 ), pixel );
       }
       {
         geoTiff.GeoToPixel( geoTiff.Extent.TopRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( pixel, Point2i.Create( 3599, 0 ) );
+        Assert.AreEqual( Point2i.Create( 3599, 0 ), pixel );
       }
       {
         geoTiff.GeoToPixel( geoTiff.Extent.BottomRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( pixel, Point2i.Create( 3599, 3599 ) );
+        Assert.AreEqual( Point2i.Create( 3599, 3599 ), pixel );
       }
       {
         geoTiff.GeoToPixel( geoTiff.Extent.BottomLeft + Point2d.Create( +geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( pixel, Point2i.Create( 0, 3599 ) );
+        Assert.AreEqual( Point2i.Create( 0, 3599 ), pixel );
       }
     }
 
@@ -158,12 +194,12 @@ namespace UnitTests
       Assert.IsTrue( geoTiff.Extent.Contains( samplePointBottomNeighbour ) );
       Assert.IsTrue( geoTiff.Extent.Contains( samplePointTopNeighbour ) );
 
-      Assert.AreEqual( 791.0, geoTiff.Sample( samplePosition ) );
-      Assert.AreEqual( 782.0, geoTiff.Sample( samplePointRightNeighbour ) );
-      Assert.AreEqual( 782.0, geoTiff.Sample( samplePointTopRightNeighbour ) );
-      Assert.AreEqual( 797.0, geoTiff.Sample( samplePointLeftNeighbour ) );
-      Assert.AreEqual( 785.0, geoTiff.Sample( samplePointBottomNeighbour ) );
-      Assert.AreEqual( 785.0, geoTiff.Sample( samplePointTopNeighbour ) );
+      Assert.AreEqual( 791.0f, geoTiff.Sample( samplePosition ) );
+      Assert.AreEqual( 782.0f, geoTiff.Sample( samplePointRightNeighbour ) );
+      Assert.AreEqual( 782.0f, geoTiff.Sample( samplePointTopRightNeighbour ) );
+      Assert.AreEqual( 797.0f, geoTiff.Sample( samplePointLeftNeighbour ) );
+      Assert.AreEqual( 785.0f, geoTiff.Sample( samplePointBottomNeighbour ) );
+      Assert.AreEqual( 785.0f, geoTiff.Sample( samplePointTopNeighbour ) );
     }
   }
 }

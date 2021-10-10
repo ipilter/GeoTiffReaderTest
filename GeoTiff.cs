@@ -13,7 +13,7 @@ namespace GeoTiffReaderTest
 
     private double[] mGeoTransform = new double[6];
     private double[] mInvGeoTransform = new double[6];
-    private double[] mPixels = null;
+    private float[] mPixels = null;
 
     public enum PixelPosition
     {
@@ -23,8 +23,6 @@ namespace GeoTiffReaderTest
       , TopLeft = 3
       , TopRight = 4
     }
-
-
 
     public GeoTiff( string path )
     {
@@ -46,12 +44,15 @@ namespace GeoTiffReaderTest
                               , Point2d.Create( mGeoTransform[0] + ( mSize.X * Resolution.X )
                                              , mGeoTransform[3] + ( mSize.Y * Resolution.Y ) ) );
 
-      mPixels = new double[mSize.X * mSize.Y];
+      mPixels = new float[mSize.X * mSize.Y];
       dataset.GetRasterBand( 1 ).ReadRaster( 0, 0, mSize.X, mSize.Y, mPixels, mSize.X, mSize.Y, 0, 0 );
     }
 
     public GeoTiff( List<string> tileImagePaths, Point2i tileCount )
     {
+      // iTODO: expectations!
+      //  - first image is the origin
+      //  - all tile images has same resolution, width and lenght
       if ( tileImagePaths.Count != tileCount.X * tileCount.Y )
       {
         throw new ArgumentException( "invalid tile count, cannot create GeoTiff" );
@@ -61,7 +62,6 @@ namespace GeoTiffReaderTest
 
       Size = Point2i.Create();
       var tileIdx = Point2i.Create();
-      double[] tileGeoTransform = new double[6];
       for ( ; tileIdx.Y < tileCount.Y; ++tileIdx.Y )
       {
         for ( ; tileIdx.X < tileCount.X; ++tileIdx.X )
@@ -71,13 +71,12 @@ namespace GeoTiffReaderTest
           tileDatasets.Add( tileDataset );
           Size.X += tileDatasets[tileIdx.X].RasterXSize;
 
-          tileDataset.GetGeoTransform( tileGeoTransform );
         }
         Size.Y += tileDatasets[0 + tileIdx.Y * tileCount.Y].RasterYSize;
-        tileDatasets[0 + tileIdx.Y * tileCount.Y].GetGeoTransform( tileGeoTransform );
       }
 
-      // first image is bottom left corner resolution is for all tiles
+      // first image is the origin, resolution is the same for all tiles
+      double[] tileGeoTransform = new double[6];
       tileDatasets[0].GetGeoTransform( tileGeoTransform );
       mGeoTransform[0] = tileGeoTransform[0];
       mGeoTransform[1] = tileGeoTransform[1];
@@ -97,33 +96,65 @@ namespace GeoTiffReaderTest
                               , Point2d.Create( mGeoTransform[0] + ( Size.X * Resolution.X )
                                                 , mGeoTransform[3] + ( Size.Y * Resolution.Y ) ) );
 
-      mPixels = new double[mSize.X * mSize.Y];
+      mPixels = new float[mSize.X * mSize.Y];
 
-      // TODO: read the tiles into thje mPixels array
-      //{
-      //  var tileDataset = tileDatasets[0];
-      //  tileDataset.GetRasterBand( 1 ).ReadRaster( 0, 0, tileDataset.RasterXSize, tileDataset.RasterYSize
-      //                                             , mPixels[0]
-      //                                             , mSize.X, mSize.Y
-      //                                             , 0, 0 );
-      //}
+      var tileWidth = tileDatasets[0].RasterXSize;
+      var tileHeight = tileDatasets[0].RasterYSize;
+      var tilePixels = new float[tileWidth * tileHeight];
+      foreach ( var tileDataset in tileDatasets )
+      {
+        tileDataset.GetRasterBand( 1 ).ReadRaster( 0, 0, tileDataset.RasterXSize, tileDataset.RasterYSize
+                                                    , tilePixels
+                                                    , tileWidth, tileHeight
+                                                    , 0, 0 );
+        tileDataset.GetGeoTransform( tileGeoTransform );
+          
+        var geoOrigin = Point2d.Create( tileGeoTransform[0], tileGeoTransform[3] );
+        geoOrigin = geoOrigin + Point2d.Create( tileGeoTransform[1] / 2.0, tileGeoTransform[5] / 2.0 ); // iTODO verify move to the nearest pixel center
+        GeoToPixel( geoOrigin, out Point2i pixelOrigin );
+          
+        for ( int y = 0; y < tileDataset.RasterYSize; ++y )
+        {
+          for ( int x = 0; x < tileDataset.RasterXSize; ++x )
+          {
+            var pixelIdx = ( pixelOrigin.X + x ) + ( pixelOrigin.Y + y ) * mSize.X;
+            var tilePixelIdx = x + y * tileDataset.RasterXSize;
+            mPixels[pixelIdx] = tilePixels[tilePixelIdx];
+          }
+        }
+      }
     }
 
-    public static void Write( List<float> pixels, int w, int h, string path )
+    public void Normalize()
+    {
+      // iTODO use min max to scale to 0.0, 1.0
+    }
+
+    public void Write( string path )
+    {
+      // reverse Y axis back to GDal form
+      var gdalM = new double[6] { mGeoTransform[0], mGeoTransform[1]
+                                  , mGeoTransform[2], mGeoTransform[3] + mGeoTransform[5] * Size.Y 
+                                  , mGeoTransform[4], -mGeoTransform[5] };
+      Write( path, mPixels, mSize.X, mSize.Y, gdalM );
+    }
+
+    public static void Write( string path, float[] pixels, int w, int h, double[] m )
     {
       var driver = Gdal.GetDriverByName( "GTiff" );
       var dataset = driver.Create( path, w, h, 1, DataType.GDT_Float32, null );
-      dataset.WriteRaster( 0, 0, w, h, pixels.ToArray(), w, h, 1, null, 0, 0, 0 );
+      dataset.SetGeoTransform( m );
+      dataset.WriteRaster( 0, 0, w, h, pixels, w, h, 1, null, 0, 0, 0 );
       dataset.FlushCache();
     }
 
-    public double Sample( Point2d geo )
+    public float Sample( Point2d geo )
     {
       GeoToPixel( geo, out Point2i pixel );
       return Pixel( pixel );
     }
 
-    public double Pixel( Point2i pixel )
+    public float Pixel( Point2i pixel )
     {
       return mPixels[pixel.X + pixel.Y * mSize.X];
     }

@@ -25,18 +25,18 @@ namespace GeoTiffReaderTest
       return earthRadius * c * 1000.0;
     }
 
-    public static void CreateWkt( string filePath, string content )
+    public static void CreateFile( string filePath, string content )
     {
       try
       {
-        using ( StreamWriter wktStream = new StreamWriter( filePath ) )
+        using ( StreamWriter stream = new StreamWriter( filePath ) )
         {
-          wktStream.WriteLine( content );
+          stream.WriteLine( content );
         }
       }
       catch ( Exception e )
       {
-        Console.WriteLine( $"Warning: cannot crete {filePath}: {e.Message}" );
+        Console.WriteLine( $"Warning: cannot create file {filePath}: {e.Message}" );
       }
     }
 
