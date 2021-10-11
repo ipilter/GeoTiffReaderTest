@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace GeoTiffReaderTest
@@ -48,6 +49,33 @@ namespace GeoTiffReaderTest
         return 0.0;
       }
       return ( b0 + ( value - a0 ) * ( b1 - b0 ) ) / a_norm;
+    }
+
+    public static void GetMinMax( float[] data, Point2i dataDim, out float min, out float max, out Point2i minPixelPos, out Point2i maxPixelPos )
+    {
+      min = float.MaxValue;
+      max = float.MinValue;
+      minPixelPos = Point2i.Create();
+      maxPixelPos = Point2i.Create();
+
+      for ( int idx = 0; idx < dataDim.X * dataDim.Y; ++idx )
+      {
+        var h = data[idx];
+
+        var y = (int)( idx / (double)dataDim.X ); // iTODO validate
+        var x = (int)( idx % (double)dataDim.X );
+
+        if ( h < min )
+        {
+          min = h;
+          minPixelPos.Set( x, y );
+        }
+        if ( h > max )
+        {
+          max = h;
+          maxPixelPos.Set( x, y );
+        }
+      }
     }
   }
 }

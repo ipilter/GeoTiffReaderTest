@@ -139,27 +139,9 @@ namespace GeoTiffReaderTest
       }
 
       // create normalized height data from the input image (height between 0.0m and 1.0m)
-      {
-        var pixels = new List<float>();
-        geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
-        geoTiff.GeoToPixel( mRegion.BottomRight, out Point2i pixelBottomRight );
-        var psx = pixelBottomRight.X - pixelTopLeft.X + 1;
-        var psy = pixelBottomRight.Y - pixelTopLeft.Y + 1;
-        for ( int y = 0; y < psy; ++y )
-        {
-          for ( int x = 0; x < psx; ++x )
-          {
-            var height = geoTiff.Pixel( Point2i.Create( pixelTopLeft.X + x, pixelTopLeft.Y + y ) );
-            var heightNorm = (float)Utils.RangeMap( min, max, 0.0, 1.0, height );
-            pixels.Add( heightNorm );
-          }
-        }
-
-        // Write out sub image
-        var m = new double[6];
-        m[1] = m[5] = 1.0;
-        GeoTiff.Write( $"{mOutputPath}heightfield.tif", pixels.ToArray(), psx, psy, m );
-      }
+      // iTODO: clip out the sub image covered by mRegion, save that one only. height width/length ratio ??
+      geoTiff.Normalize();
+      geoTiff.Write( $"{mOutputPath}heightfield.tif" );
     }
 
     void AddVertex( List<double> vertices, List<double> uvs, Dictionary<Point2d, int> vertexIndexTable
@@ -221,12 +203,12 @@ namespace GeoTiffReaderTest
           if ( height > max )
           {
             max = height;
-            maxPixel.Clone( pixel );
+            maxPixel.Set( pixel );
           }
           if ( height < min )
           {
             min = height;
-            minPixel.Clone( pixel );
+            minPixel.Set( pixel );
           }
         }
       }

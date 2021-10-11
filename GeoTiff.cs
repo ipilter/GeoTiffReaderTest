@@ -23,66 +23,68 @@ namespace GeoTiffReaderTest
       , TopLeft = 3
       , TopRight = 4
     }
-
-    public GeoTiff( string path )
+    void Create( List<string> tileImagePaths, Point2i tileCount )
     {
-      var dataset = Gdal.Open( path, Access.GA_ReadOnly );
-      Size = Point2i.Create( dataset.RasterXSize, dataset.RasterYSize );
-
-      dataset.GetGeoTransform( mGeoTransform );
-      NorthUp = mGeoTransform[5] < 0;
-
-      // change origin from TopLeft to BottomLeft
-      {
-        mGeoTransform[3] = mGeoTransform[3] + mGeoTransform[5] * Size.Y;
-        mGeoTransform[5] = Math.Abs( mGeoTransform[5] );
-      }
-      Gdal.InvGeoTransform( mGeoTransform, mInvGeoTransform );
-
-      Resolution = Point2d.Create( mGeoTransform[1], mGeoTransform[5] );
-      Extent = Extent.Create( Point2d.Create( mGeoTransform[0], mGeoTransform[3] )
-                              , Point2d.Create( mGeoTransform[0] + ( mSize.X * Resolution.X )
-                                             , mGeoTransform[3] + ( mSize.Y * Resolution.Y ) ) );
-
-      mPixels = new float[mSize.X * mSize.Y];
-      dataset.GetRasterBand( 1 ).ReadRaster( 0, 0, mSize.X, mSize.Y, mPixels, mSize.X, mSize.Y, 0, 0 );
-    }
-
-    public GeoTiff( List<string> tileImagePaths, Point2i tileCount )
-    {
-      // iTODO: expectations!
-      //  - first image is the origin
-      //  - all tile images has same resolution, width and lenght
       if ( tileImagePaths.Count != tileCount.X * tileCount.Y )
       {
         throw new ArgumentException( "invalid tile count, cannot create GeoTiff" );
       }
 
+      // collect input datasets and find the top left tile
       var tileDatasets = new List<Dataset>();
-
-      Size = Point2i.Create();
-      var tileIdx = Point2i.Create();
-      for ( ; tileIdx.Y < tileCount.Y; ++tileIdx.Y )
+      var topLeftTileIndex = -1;
       {
-        for ( ; tileIdx.X < tileCount.X; ++tileIdx.X )
+        var tileIdx = Point2i.Create();
+        var topLeftTileGeo = Point2d.Create( 1000.0, -1000.0 );
+        for ( tileIdx.Y = 0; tileIdx.Y < tileCount.Y; ++tileIdx.Y )
         {
-          var tileFilePath = tileImagePaths[tileIdx.X + tileIdx.Y * tileCount.Y];
-          var tileDataset = Gdal.Open( tileFilePath, Access.GA_ReadOnly );
-          tileDatasets.Add( tileDataset );
-          Size.X += tileDatasets[tileIdx.X].RasterXSize;
+          for ( tileIdx.X = 0; tileIdx.X < tileCount.X; ++tileIdx.X )
+          {
+            var tileFilePath = tileImagePaths[tileIdx.X + tileIdx.Y * tileCount.X];
+            var tileDataset = Gdal.Open( tileFilePath, Access.GA_ReadOnly );
+            tileDatasets.Add( tileDataset );
 
+            double[] tileGeoTransform = new double[6];
+            tileDataset.GetGeoTransform( tileGeoTransform );
+            if ( tileGeoTransform[0] < topLeftTileGeo.X || ( Utils.Equals( tileGeoTransform[0], topLeftTileGeo.X, 0.000000001 ) && tileGeoTransform[3] > topLeftTileGeo.Y ) )
+            {
+              topLeftTileGeo.X = tileGeoTransform[0];
+              topLeftTileGeo.Y = tileGeoTransform[3];
+              topLeftTileIndex = tileIdx.X + tileIdx.Y * tileCount.X;
+            }
+          }
         }
-        Size.Y += tileDatasets[0 + tileIdx.Y * tileCount.Y].RasterYSize;
+      }
+      if ( topLeftTileIndex < 0 || topLeftTileIndex >= tileImagePaths.Count )
+      {
+        throw new IndexOutOfRangeException( "top left tile index is invalid" );
+      }
+
+      // calculate merged image size
+      {
+        Size = Point2i.Create();
+        for ( var idx = 0; idx < tileCount.X; ++idx )
+        {
+          var tileDataset = tileDatasets[idx];
+          Size.X += tileDataset.RasterXSize;
+        }
+        for ( var idx = 0; idx < tileCount.Y; ++idx )
+        {
+          var tileDataset = tileDatasets[idx * tileCount.X];
+          Size.Y += tileDataset.RasterYSize;
+        }
       }
 
       // first image is the origin, resolution is the same for all tiles
-      double[] tileGeoTransform = new double[6];
-      tileDatasets[0].GetGeoTransform( tileGeoTransform );
-      mGeoTransform[0] = tileGeoTransform[0];
-      mGeoTransform[1] = tileGeoTransform[1];
-      mGeoTransform[3] = tileGeoTransform[3];
-      mGeoTransform[5] = tileGeoTransform[5];
-      NorthUp = mGeoTransform[5] < 0;
+      {
+        double[] tileGeoTransform = new double[6];
+        tileDatasets[topLeftTileIndex].GetGeoTransform( tileGeoTransform );
+        mGeoTransform[0] = tileGeoTransform[0];
+        mGeoTransform[1] = tileGeoTransform[1];
+        mGeoTransform[3] = tileGeoTransform[3];
+        mGeoTransform[5] = tileGeoTransform[5];
+        NorthUp = mGeoTransform[5] < 0;
+      }
 
       // change origin from TopLeft to BottomLeft
       {
@@ -107,12 +109,13 @@ namespace GeoTiffReaderTest
                                                     , tilePixels
                                                     , tileWidth, tileHeight
                                                     , 0, 0 );
+        double[] tileGeoTransform = new double[6];
         tileDataset.GetGeoTransform( tileGeoTransform );
-          
+
         var geoOrigin = Point2d.Create( tileGeoTransform[0], tileGeoTransform[3] );
         geoOrigin = geoOrigin + Point2d.Create( tileGeoTransform[1] / 2.0, tileGeoTransform[5] / 2.0 ); // iTODO verify move to the nearest pixel center
         GeoToPixel( geoOrigin, out Point2i pixelOrigin );
-          
+
         for ( int y = 0; y < tileDataset.RasterYSize; ++y )
         {
           for ( int x = 0; x < tileDataset.RasterXSize; ++x )
@@ -125,9 +128,39 @@ namespace GeoTiffReaderTest
       }
     }
 
+    public GeoTiff( string path )
+    {
+      Create( new List<string>() { path }, Point2i.Create( 1, 1 ) );
+    }
+
+    // all tile images must have the same resolution, width and length
+    public GeoTiff( List<string> tileImagePaths, Point2i tileCount )
+    {
+      Create( tileImagePaths, tileCount );
+    }
+
+    public void GetMinMax( out float min, out float max )
+    {
+      GetMinMax( out min, out max, out _, out _ );
+    }
+
+    public void GetMinMax( out float min, out float max, out Point2i minPixelPos, out Point2i maxPixelPos )
+    {
+      Utils.GetMinMax( mPixels, Size, out min, out max, out minPixelPos, out maxPixelPos );
+    }
+
     public void Normalize()
     {
-      // iTODO use min max to scale to 0.0, 1.0
+      GetMinMax( out float min, out float max );
+      for ( var pixelPos = Point2i.Create(); pixelPos.Y < Size.Y; ++pixelPos.Y )
+      {
+        for ( pixelPos.X = 0; pixelPos.X < Size.X; ++pixelPos.X )
+        {
+          var height = Pixel( pixelPos );
+          var heightNormalized = (float)Utils.RangeMap( min, max, 0.0, 1.0, height );
+          mPixels[pixelPos.X + pixelPos.Y * Size.X ] = heightNormalized;
+        }
+      }
     }
 
     public void Write( string path )

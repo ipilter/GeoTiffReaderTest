@@ -23,10 +23,15 @@ namespace GeoTiffReaderTest
       return Create( a.X + b.X, a.Y + b.Y );
     }
 
-    public void Clone( Point2i other )
+    public void Set( Point2i other )
     {
-      X = other.X;
-      Y = other.Y;
+      Set( other.X, other.Y );
+    }
+
+    public void Set( int x = 0, int y = 0 )
+    {
+      X = x;
+      Y = y;
     }
 
     public override string ToString()
