@@ -1,14 +1,27 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
+
+// @equator:
+// 1°          = 111 km ( or 60 nautical miles )
+// 0.1°        = 11.1 km
+// 0.01°       = 1.11 km ( 2 decimals, km accuracy )
+// 0.001°      = 111 m
+// 0.0001°     = 11.1 m
+// 0.00001°    = 1.11 m
+// 0.000001°   = 0.11 m ( 7 decimals, cm accuracy )
+// 0.0000001°  = 0.011 m
+// 0.00000001° = 0.0011 m ( 9 decimals, mm accuracy )
+
 
 namespace GeoTiffReaderTest
 {
   public class Utils
   {
-    public static bool Equals( double a, double b, double eps = 0.0000001 )
+    public static double Epsilon { get { return 0.00000001; } private set { } }
+
+    public static bool Equal( double a, double b, double e )
     {
-      return Math.Abs( a - b ) < eps;
+      return Math.Abs( a - b ) < e;
     }
 
     public static double ToRad( double deg )

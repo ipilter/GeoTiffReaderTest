@@ -45,7 +45,7 @@ namespace GeoTiffReaderTest
 
     public static bool operator ==( Point2d a, Point2d b )
     {
-      return Utils.Equals( a.X, b.X ) && Utils.Equals( a.Y, b.Y );
+      return Utils.Equal( a.X, b.X, Utils.Epsilon ) && Utils.Equal( a.Y, b.Y, Utils.Epsilon );
     }
 
     public static bool operator !=( Point2d a, Point2d b )

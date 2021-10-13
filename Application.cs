@@ -30,7 +30,7 @@ namespace GeoTiffReaderTest
     {
       GetTileImages( out List<string> tileImagePaths, out Point2i tileDim );
 
-      var geoTiff = GeoTiffFactory.CreateFromTiles( tileImagePaths, tileDim );
+      var geoTiff = new GeoTiff( tileImagePaths, tileDim );
       CreateMesh( geoTiff );
     }
 
@@ -74,40 +74,38 @@ namespace GeoTiffReaderTest
     {
       Utils.CreateFile( mOutputPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
 
-      geoTiff.GetMinMax( out float min, out float max, out Point2i minPixel, out Point2i maxPixel );
-      geoTiff.PixelToGeo( minPixel, out Point2d minGeo, GeoTiff.PixelPosition.Center );
-      geoTiff.PixelToGeo( maxPixel, out Point2d maxGeo, GeoTiff.PixelPosition.Center );
+      // iTODO region only
+      var subGeoTiff = new GeoTiff( geoTiff, mRegion );
+      if ( subGeoTiff == null )
+      {
+        throw new ApplicationException( "cannot create sub image from input geotiff" );
+      }
 
-      Console.WriteLine( $"Minimum height is {min}m, maximum is {max}m" );
-      Utils.CreateFile( mOutputPath + @"\minGeo.csv", minGeo.AsWkt() );
-      Utils.CreateFile( mOutputPath + @"\maxGeo.csv", maxGeo.AsWkt() );
+      subGeoTiff.GetMinMax( out float subMin, out float subMax, out Point2i subMinPixel, out Point2i subMaxPixel );
+      subGeoTiff.PixelToGeo( subMinPixel, out Point2d subMinGeo, GeoTiff.PixelPosition.Center );
+      subGeoTiff.PixelToGeo( subMaxPixel, out Point2d subMaxGeo, GeoTiff.PixelPosition.Center );
+
+      Console.WriteLine( $"Minimum height is {subMin}m, maximum is {subMax}m" );
+      Utils.CreateFile( mOutputPath + @"\subMinGeo.csv", subMinGeo.AsWkt() );
+      Utils.CreateFile( mOutputPath + @"\subMaxGeo.csv", subMaxGeo.AsWkt() );
+
 
       // create normalized height data from the input image (height between 0.0m and 1.0m)
-      // iTODO region only
-      geoTiff.Normalize();
-      geoTiff.Write( $"{mOutputPath}heightfield.tif" );
+      subGeoTiff.Normalize();
+      subGeoTiff.Write( $"{mOutputPath}heightfield.tif" );
 
       Console.WriteLine($"{geoTiff.Extent.SizeInMeters}");
 
       //// Create mesh from the region
       //{
-      //  Utils.CreateFile( mOutputPath + @"\region.csv", mRegion.AsWkt() );
-      //  Utils.CreateFile( mOutputPath + @"\regionbl.csv", mRegion.BottomLeft.AsWkt() );
-      //  Utils.CreateFile( mOutputPath + @"\regiontr.csv", mRegion.TopRight.AsWkt() );
-
       //  // get region in pixel space
       //  geoTiff.GeoToPixel( mRegion.BottomLeft, out Point2i pixelBottomLeft );
       //  geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
       //  geoTiff.GeoToPixel( mRegion.TopRight, out Point2i pixelTopRight );
-
       //  // expand to pixel's outter side
       //  geoTiff.PixelToGeo( pixelBottomLeft, out Point2d geoBottomLeft, GeoTiff.PixelPosition.BottomLeft );
       //  geoTiff.PixelToGeo( pixelTopLeft, out Point2d geoTopLeft, GeoTiff.PixelPosition.TopLeft );
       //  geoTiff.PixelToGeo( pixelTopRight, out Point2d geoTopRight, GeoTiff.PixelPosition.TopRight );
-
-      //  Utils.CreateFile( mOutputPath + @"\regionBottomLeft.csv", geoBottomLeft.AsWkt() );
-      //  Utils.CreateFile( mOutputPath + @"\regionTopLeft.csv", geoTopLeft.AsWkt() );
-      //  Utils.CreateFile( mOutputPath + @"\regionTopRight.csv", geoTopRight.AsWkt() );
 
       //  var dh = max - min;
       //  var meterScaled = 1.0 / dh;

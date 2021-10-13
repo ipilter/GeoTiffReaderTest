@@ -64,7 +64,6 @@
     <Compile Include="Extent.cs" />
     <Compile Include="GdalConfiguration.cs" />
     <Compile Include="GeoTiff.cs" />
-    <Compile Include="GeoTiffFactory.cs" />
     <Compile Include="Point2i.cs" />
     <Compile Include="Point2d.cs" />
     <Compile Include="Program.cs" />

@@ -20,8 +20,9 @@ namespace UnitTests
     {
       var testImage = @"..\..\testData\ALPSMLC30_N036W115_DSM.tif";
 
+      Assert.IsTrue( File.Exists( testImage ) );
+
       GeoTiff geoTiff = new GeoTiff( testImage  );
-      
       //geoTiff.Write( "e:\\testiViaSingleFile.tif" );
 
       Assert.AreEqual( Point2d.Create( -114, 37 ), geoTiff.Extent.TopRight );
@@ -192,21 +193,18 @@ namespace UnitTests
 
       GeoTiff geoTiff = new GeoTiff( testImage );
 
+      // get Extent in pixel space ( as the Extent's corners are at the pixels outter boundaries, move the geo positions half pixel invards
+      var testPositions = new List<Tuple<Point2d, Point2i>>() 
+      { Tuple.Create( geoTiff.Extent.TopLeft + Point2d.Create( geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5), Point2i.Create( 0, 0 ) )
+        , Tuple.Create( geoTiff.Extent.TopRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5 ), Point2i.Create( 3599, 0 ) )
+        , Tuple.Create( geoTiff.Extent.BottomRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), Point2i.Create( 3599, 3599 ) )
+        , Tuple.Create( geoTiff.Extent.BottomLeft + Point2d.Create( +geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), Point2i.Create( 0, 3599 ) )
+      };
+
+      foreach ( var testPosition in testPositions )
       {
-        geoTiff.GeoToPixel( geoTiff.Extent.TopLeft + Point2d.Create( geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( Point2i.Create( 0, 0 ), pixel );
-      }
-      {
-        geoTiff.GeoToPixel( geoTiff.Extent.TopRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, -geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( Point2i.Create( 3599, 0 ), pixel );
-      }
-      {
-        geoTiff.GeoToPixel( geoTiff.Extent.BottomRight + Point2d.Create( -geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( Point2i.Create( 3599, 3599 ), pixel );
-      }
-      {
-        geoTiff.GeoToPixel( geoTiff.Extent.BottomLeft + Point2d.Create( +geoTiff.Resolution.X * 0.5, +geoTiff.Resolution.Y * 0.5 ), out Point2i pixel );
-        Assert.AreEqual( Point2i.Create( 0, 3599 ), pixel );
+        geoTiff.GeoToPixel( testPosition.Item1, out Point2i pixel );
+        Assert.AreEqual( testPosition.Item2, pixel );
       }
     }
 
@@ -362,6 +360,42 @@ namespace UnitTests
         //Utils.CreateFile( @"e:\min.csv", minGeo.AsWkt() );
         //Utils.CreateFile( @"e:\max.csv", maxGeo.AsWkt() );
       }
+    }
+
+    [TestMethod]
+    public void TestCreateSubImage()
+    {
+      var tileCount = Point2i.Create( 2, 1 );
+      List<string> tileFileList = new List<string>();
+      tileFileList.Add( @"..\..\testData\ALPSMLC30_N036W115_DSM.tif" );
+      tileFileList.Add( @"..\..\testData\ALPSMLC30_N036W114_DSM.tif" );
+
+      foreach ( var tile in tileFileList )
+      {
+        Assert.IsTrue( File.Exists( tile ) );
+      }
+
+      GeoTiff geoTiff = new GeoTiff( tileFileList, tileCount );
+      
+      var subRegion = Extent.Create( geoTiff.Extent );
+      subRegion.BottomLeft.X = subRegion.BottomLeft.X + 0.8;
+      subRegion.BottomLeft.Y = subRegion.BottomLeft.Y + 0.3;
+      subRegion.TopRight.X = subRegion.TopRight.X - 0.8;
+      subRegion.TopRight.Y = subRegion.TopRight.Y - 0.3;
+      //Utils.CreateFile( @"e:\subRegio.csv", subRegion.AsWkt() );
+
+      GeoTiff subGeoTiff = new GeoTiff( geoTiff, subRegion );
+
+      Assert.IsTrue( subGeoTiff != null );
+
+      //subGeoTiff.Write( "e:\\subTest.tif" );
+
+      Assert.AreEqual( 0.4, subGeoTiff.Extent.Size.X, Utils.Epsilon );
+      Assert.AreEqual( 0.4, subGeoTiff.Extent.Size.Y, Utils.Epsilon );
+      Assert.AreEqual( 1439, subGeoTiff.Size.X );
+      Assert.AreEqual( 1439, subGeoTiff.Size.Y );
+      Assert.AreEqual( 0.4 / 1439.0, subGeoTiff.Resolution.X, Utils.Epsilon );
+      Assert.AreEqual( 0.4 / 1439.0, subGeoTiff.Resolution.Y, Utils.Epsilon );
     }
   }
 }

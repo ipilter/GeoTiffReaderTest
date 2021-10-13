@@ -7,6 +7,11 @@
       return new Extent( bl, tr );
     }
 
+    public static Extent Create( Extent other )
+    {
+      return new Extent( other.BottomLeft, other.TopRight );
+    }
+
     protected Extent( Point2d bl, Point2d tr )
       : base( bl, tr )
     { }
