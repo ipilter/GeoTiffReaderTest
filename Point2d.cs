@@ -18,10 +18,15 @@ namespace GeoTiffReaderTest
     public double X { get; set; }
     public double Y { get; set; }
 
-    public void Clone( Point2d other )
+    public void Set( Point2d other )
     {
-      X = other.X;
-      Y = other.Y;
+      Set( other.X, other.Y );
+    }
+
+    public void Set( double x = 0, double y = 0 )
+    {
+      X = x;
+      Y = y;
     }
 
     public override string ToString()

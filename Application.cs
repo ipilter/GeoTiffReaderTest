@@ -28,33 +28,45 @@ namespace GeoTiffReaderTest
 
     public void run()
     {
-      GetTileImages( out List<string> tileImagePaths, out Point2i tileDim );
-
+      ParseInputTileDataFile( out List<string> tileImagePaths, out Point2i tileDim );
+      Console.WriteLine( $"Loading input geotiff..." );
       var geoTiff = new GeoTiff( tileImagePaths, tileDim );
-      CreateMesh( geoTiff );
+      var subGeoTiff = new GeoTiff( geoTiff, mRegion );
+      if ( subGeoTiff == null )
+      {
+        throw new ApplicationException( "cannot create sub image from input geotiff" );
+      }
+      CreateMesh( subGeoTiff );
     }
 
-    void GetTileImages( out List<string> tileImagePaths, out Point2i tileDim )
+    void ParseInputTileDataFile( out List<string> tileImagePaths, out Point2i tileDim )
     {
       tileDim = Point2i.Create();
       tileImagePaths = new List<string>();
+      mRegion = Extent.Create( Point2d.Create(), Point2d.Create() );
+
       using ( var e = new StreamReader( mInputDataFilePath )  )
       {
         string line;
-        bool firstLine = true;
+        uint lineIdx = 0;
         while ( (line = e.ReadLine() ) != null )
         {
           line = line.Trim();
           if ( line.Length == 0 || line[0] == '#' )
-            continue;
-          if ( line[0] == '"' )
-            line = line.Remove( 0, 1 );
-          if ( line[line.Length - 1] == '"' )
-            line = line.Remove( line.Length - 1, 1 );
-
-          if ( firstLine )
           {
-            firstLine = false;
+            continue;
+          }
+          if ( line[0] == '"' )
+          {
+            line = line.Remove( 0, 1 ); 
+          }
+          if ( line[line.Length - 1] == '"' )
+          {
+            line = line.Remove( line.Length - 1, 1 );
+          }
+
+          if ( lineIdx == 0 )
+          {
             var dimensions = Regex.Matches( line, @"\d+" ).Cast<Match>().Select( m => m.Value ).ToArray();
             if ( dimensions.Length != 2 )
             {
@@ -62,28 +74,34 @@ namespace GeoTiffReaderTest
             }
             tileDim.Set( int.Parse( dimensions[0] ), int.Parse( dimensions[1] ) );
           }
+          else if( lineIdx == 1 )
+          {
+            var lbrt = Regex.Matches( line, @"-?\d+.\d+" ).Cast<Match>().Select( m => m.Value ).ToArray();
+            if ( lbrt.Length != 4 )
+            {
+              throw new ArgumentException( "invalid region values" );
+            }
+            mRegion.BottomLeft.Set( double.Parse( lbrt[0] ), double.Parse( lbrt[1] ) );
+            mRegion.TopRight.Set( double.Parse( lbrt[2] ), double.Parse( lbrt[3] ) );
+          }
           else
           {
             tileImagePaths.Add( line );
           }
+
+          ++lineIdx;
         }
       }
     }
 
     void CreateMesh( GeoTiff geoTiff )
     {
+      Console.WriteLine( $"Creating Mesh..." );
       Utils.CreateFile( mOutputPath + @"\extent.csv", geoTiff.Extent.AsWkt() );
 
-      // iTODO region only
-      var subGeoTiff = new GeoTiff( geoTiff, mRegion );
-      if ( subGeoTiff == null )
-      {
-        throw new ApplicationException( "cannot create sub image from input geotiff" );
-      }
-
-      subGeoTiff.GetMinMax( out float subMin, out float subMax, out Point2i subMinPixel, out Point2i subMaxPixel );
-      subGeoTiff.PixelToGeo( subMinPixel, out Point2d subMinGeo, GeoTiff.PixelPosition.Center );
-      subGeoTiff.PixelToGeo( subMaxPixel, out Point2d subMaxGeo, GeoTiff.PixelPosition.Center );
+      geoTiff.GetMinMax( out float subMin, out float subMax, out Point2i subMinPixel, out Point2i subMaxPixel );
+      geoTiff.PixelToGeo( subMinPixel, out Point2d subMinGeo, GeoTiff.PixelPosition.Center );
+      geoTiff.PixelToGeo( subMaxPixel, out Point2d subMaxGeo, GeoTiff.PixelPosition.Center );
 
       Console.WriteLine( $"Minimum height is {subMin}m, maximum is {subMax}m" );
       Utils.CreateFile( mOutputPath + @"\subMinGeo.csv", subMinGeo.AsWkt() );
@@ -91,77 +109,78 @@ namespace GeoTiffReaderTest
 
 
       // create normalized height data from the input image (height between 0.0m and 1.0m)
-      subGeoTiff.Normalize();
-      subGeoTiff.Write( $"{mOutputPath}heightfield.tif" );
+      geoTiff.GetMinMax( out float min, out float max );
+      geoTiff.Normalize();
+      geoTiff.Write( $"{mOutputPath}heightfield.tif" );
 
       Console.WriteLine($"{geoTiff.Extent.SizeInMeters}");
 
-      //// Create mesh from the region
-      //{
-      //  // get region in pixel space
-      //  geoTiff.GeoToPixel( mRegion.BottomLeft, out Point2i pixelBottomLeft );
-      //  geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
-      //  geoTiff.GeoToPixel( mRegion.TopRight, out Point2i pixelTopRight );
-      //  // expand to pixel's outter side
-      //  geoTiff.PixelToGeo( pixelBottomLeft, out Point2d geoBottomLeft, GeoTiff.PixelPosition.BottomLeft );
-      //  geoTiff.PixelToGeo( pixelTopLeft, out Point2d geoTopLeft, GeoTiff.PixelPosition.TopLeft );
-      //  geoTiff.PixelToGeo( pixelTopRight, out Point2d geoTopRight, GeoTiff.PixelPosition.TopRight );
+      // Create mesh from the region
+      {
+        // get region in pixel space
+        geoTiff.GeoToPixel( mRegion.BottomLeft, out Point2i pixelBottomLeft );
+        geoTiff.GeoToPixel( mRegion.TopLeft, out Point2i pixelTopLeft );
+        geoTiff.GeoToPixel( mRegion.TopRight, out Point2i pixelTopRight );
+        // expand to pixel's outter side
+        geoTiff.PixelToGeo( pixelBottomLeft, out Point2d geoBottomLeft, GeoTiff.PixelPosition.BottomLeft );
+        geoTiff.PixelToGeo( pixelTopLeft, out Point2d geoTopLeft, GeoTiff.PixelPosition.TopLeft );
+        geoTiff.PixelToGeo( pixelTopRight, out Point2d geoTopRight, GeoTiff.PixelPosition.TopRight );
 
-      //  var dh = max - min;
-      //  var meterScaled = 1.0 / dh;
-      //  var dLefTopRight = Utils.Distance( geoTopLeft, geoTopRight );
-      //  var dTopBottom = Utils.Distance( geoTopLeft, geoBottomLeft );
-      //  Console.WriteLine( $"dLefTopRight is {dLefTopRight}m, dTopBottom is {dTopBottom}m" );
+        var dh = max - min;
+        var meterScaled = 1.0 / dh;
+        var dLefTopRight = Utils.Distance( geoTopLeft, geoTopRight );
+        var dTopBottom = Utils.Distance( geoTopLeft, geoBottomLeft );
+        Console.WriteLine( $"dLefTopRight is {dLefTopRight}m, dTopBottom is {dTopBottom}m" );
 
-      //  var dLefTopRightScaled = dLefTopRight * meterScaled;
-      //  var dTopBottomScaled = dTopBottom * meterScaled;
+        var dLefTopRightScaled = dLefTopRight * meterScaled;
+        var dTopBottomScaled = dTopBottom * meterScaled;
 
-      //  var vertices = new List<double>();
-      //  var uvs = new List<double>();
-      //  var faces = new List<int>();
-      //  var vertexIndexTable = new Dictionary<Point2d, int>();
+        var vertices = new List<double>();
+        var uvs = new List<double>();
+        var faces = new List<int>();
+        var vertexIndexTable = new Dictionary<Point2d, int>();
 
-      //  var meshOrigin = Point2d.Create();
-      //  var uvOrigin = Point2d.Create();
+        var meshOrigin = Point2d.Create();
+        var uvOrigin = Point2d.Create();
 
-      //  var dX = dLefTopRightScaled / mMeshSubdivision;
-      //  var dY = dTopBottomScaled / mMeshSubdivision;
-      //  var du = 1.0 / mMeshSubdivision;
-      //  var dv = 1.0 / mMeshSubdivision;
-      //  for ( int y = 0; y < mMeshSubdivision; ++y )
-      //  {
-      //    for ( int x = 0; x < mMeshSubdivision; ++x )
-      //    {
-      //      AddFace( vertices, uvs, faces, vertexIndexTable
-      //               , meshOrigin.X + x * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + y * dv
-      //               , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + y * dv
-      //               , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + ( y + 1 ) * dv
-      //               , meshOrigin.X + x * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + ( y + 1 ) * dv );
-      //    }
-      //  }
+        var dX = dLefTopRightScaled / mMeshSubdivision;
+        var dY = dTopBottomScaled / mMeshSubdivision;
+        var du = 1.0 / mMeshSubdivision;
+        var dv = 1.0 / mMeshSubdivision;
+        for ( int y = 0; y < mMeshSubdivision; ++y )
+        {
+          for ( int x = 0; x < mMeshSubdivision; ++x )
+          {
+            AddFace( vertices, uvs, faces, vertexIndexTable
+                     , meshOrigin.X + x * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + y * dv
+                     , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + y * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + y * dv
+                     , meshOrigin.X + ( x + 1 ) * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + ( x + 1 ) * du, uvOrigin.Y + ( y + 1 ) * dv
+                     , meshOrigin.X + x * dX, meshOrigin.Y + ( y + 1 ) * dY, 0.0, uvOrigin.X + x * du, uvOrigin.Y + ( y + 1 ) * dv );
+          }
+        }
 
-      //  // Wrtie out mesh obj
-      //  double scale = 1.0;
-      //  using ( StreamWriter wktStream = new StreamWriter( $"{mOutputPath}\\mesh.obj" ) )
-      //  {
-      //    for ( int i = 0; i < vertices.Count; i += 3 )
-      //    {
-      //      wktStream.WriteLine( $"v {vertices[i] * scale} {vertices[i + 1] * scale} {vertices[i + 2] * scale}" );
-      //    }
+        // Wrtie out mesh obj
+        double scale = 1.0;
+        using ( StreamWriter wktStream = new StreamWriter( $"{mOutputPath}\\mesh.obj" ) )
+        {
+          for ( int i = 0; i < vertices.Count; i += 3 )
+          {
+            wktStream.WriteLine( $"v {vertices[i] * scale} {vertices[i + 1] * scale} {vertices[i + 2] * scale}" );
+          }
 
-      //    for ( int i = 0; i < uvs.Count; i += 2 )
-      //    {
-      //      wktStream.WriteLine( $"vt {uvs[i]} {uvs[i + 1]}" );
-      //    }
+          for ( int i = 0; i < uvs.Count; i += 2 )
+          {
+            wktStream.WriteLine( $"vt {uvs[i]} {uvs[i + 1]}" );
+          }
 
-      //    wktStream.WriteLine( $"vn 0.0 0.0 1.0" );
+          wktStream.WriteLine( $"vn 0.0 0.0 1.0" );
 
-      //    for ( int i = 0; i < faces.Count; i += 8 ) // 4 * 2: 4 vertex 2 ints per vertex
-      //    {
-      //      wktStream.WriteLine( $"f {faces[i]}/{faces[i + 1]}/1 {faces[i + 2]}/{faces[i + 3]}/1 {faces[i + 4]}/{faces[i + 5]}/1 {faces[i + 6]}/{faces[i + 7]}/1" );
-      //    }
-      //  }
-      //}
+          for ( int i = 0; i < faces.Count; i += 8 ) // 4 * 2: 4 vertex 2 ints per vertex
+          {
+            wktStream.WriteLine( $"f {faces[i]}/{faces[i + 1]}/1 {faces[i + 2]}/{faces[i + 3]}/1 {faces[i + 4]}/{faces[i + 5]}/1 {faces[i + 6]}/{faces[i + 7]}/1" );
+          }
+        }
+      }
     }
 
     void AddVertex( List<double> vertices, List<double> uvs, Dictionary<Point2d, int> vertexIndexTable
@@ -222,9 +241,9 @@ namespace GeoTiffReaderTest
 
     void ParseArgs( string[] args )
     {
-      if ( args.Length < 5 )
+      if ( args.Length < 1 )
       {
-        throw new ArgumentException( @"Invalid arguments. Usage: datFilePath right bottom left top [outputPath=""Desktop"" meshSubdivision=16]" );
+        throw new ArgumentException( @"Invalid arguments. Usage: datFilePath [outputPath=""Desktop"" meshSubdivision=16]" );
       }
 
       // mandatories
@@ -234,12 +253,9 @@ namespace GeoTiffReaderTest
         throw new ArgumentException( @"cannot find input data file" );
       }
 
-      mRegion = Extent.Create( Point2d.Create( double.Parse( args[1] ), double.Parse( args[2] ) )
-                               , Point2d.Create( double.Parse( args[3] ), double.Parse( args[4] ) ) );
-
       // optionals
-      ParseOptional( args, 5, ref mOutputPath, Environment.GetFolderPath( Environment.SpecialFolder.DesktopDirectory ) );
-      ParseOptional( args, 6, ref mMeshSubdivision, 32 );
+      ParseOptional( args, 1, ref mOutputPath, Environment.GetFolderPath( Environment.SpecialFolder.DesktopDirectory ) );
+      ParseOptional( args, 2, ref mMeshSubdivision, 32 );
     }
 
     void ParseOptional( string[] args, int idx, ref string value, string defaultValue )
